@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Beehive Monitor</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #fff7d6, #ffe29a);
+      color: #2c2105;
+    }
+
+    .app {
+      max-width: 520px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .bee-icon {
+      font-size: 54px;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+    }
+
+    h2 {
+      margin-top: 0;
+      margin-bottom: 14px;
+      font-size: 21px;
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      color: #6b5a25;
+      font-size: 15px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 22px;
+      padding: 22px;
+      margin-bottom: 18px;
+      box-shadow: 0 10px 25px rgba(80, 55, 0, 0.15);
+    }
+
+    .status-card {
+      text-align: center;
+    }
+
+    .status-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+      background: #c7c7c7;
+      vertical-align: middle;
+    }
+
+    .connected {
+      background: #2ecc71;
+    }
+
+    .warning {
+      background: #f39c12;
+    }
+
+    .error {
+      background: #e74c3c;
+    }
+
+    .status-text {
+      font-size: 18px;
+      font-weight: bold;
+    }
+
+    button {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 16px;
+      background: #f5a400;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 6px 12px rgba(120, 80, 0, 0.2);
+      margin-top: 10px;
+    }
+
+    button:hover {
+      background: #e69500;
+    }
+
+    button:disabled {
+      background: #c7c7c7;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .data-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .data-box {
+      background: #fff8df;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .wide-box {
+      grid-column: span 2;
+    }
+
+    .label {
+      font-size: 13px;
+      color: #7b6a2e;
+      margin-bottom: 6px;
+    }
+
+    .value {
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .help-text {
+      font-size: 14px;
+      color: #6b5a25;
+      line-height: 1.5;
+    }
+
+    .message-log {
+      max-height: 180px;
+      overflow-y: auto;
+      background: #fff8df;
+      border-radius: 14px;
+      padding: 10px;
+      font-size: 14px;
+      line-height: 1.4;
+      color: #2c2105;
+    }
+
+    .message-entry {
+      padding: 7px 0;
+      border-bottom: 1px solid #f0e1aa;
+    }
+
+    .message-entry:last-child {
+      border-bottom: none;
+    }
+
+    .message-time {
+      display: block;
+      font-size: 11px;
+      color: #7b6a2e;
+      margin-bottom: 2px;
+    }
+
+    .file-status {
+      font-size: 14px;
+      color: #6b5a25;
+      margin-top: 8px;
+      line-height: 1.4;
+    }
+
+    .file-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .tile {
+      background: #fff8df;
+      border-radius: 14px;
+      padding: 10px;
+      text-align: center;
+      min-height: 138px;
+      box-sizing: border-box;
+    }
+
+    .tile-title {
+      font-size: 15px;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .tile canvas {
+      display: none;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      image-rendering: pixelated;
+      border-radius: 8px;
+      background: black;
+      margin-bottom: 6px;
+    }
+
+    .tile-status {
+      font-size: 12px;
+      color: #6b5a25;
+      min-height: 32px;
+    }
+
+    .mini-links {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .mini-links a {
+      display: none;
+      flex: 1;
+      padding: 7px 4px;
+      border-radius: 8px;
+      background: #f5a400;
+      color: white;
+      text-align: center;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .bulk-buttons {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .bulk-buttons button {
+      margin-top: 0;
+      font-size: 15px;
+      padding: 13px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="bee-icon">🐝</div>
+      <h1>Beehive Monitor</h1>
+      <div class="subtitle">Simple hive health updates from your Raspberry Pi</div>
+    </div>
+
+    <div class="card status-card">
+      <p>
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusText" class="status-text">Not connected</span>
+      </p>
+
+      <button id="connectBtn">Connect to Hive Sensor</button>
+    </div>
+
+    <div class="card">
+      <h2>Bluetooth Messages</h2>
+      <div id="bluetoothMessageLog" class="message-log">
+        <div class="message-entry">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Received Files</h2>
+
+      <div class="file-grid">
+        <div class="tile" id="tile3">
+          <div class="tile-title">Picture 3</div>
+          <canvas id="canvas3"></canvas>
+          <div class="tile-status" id="status3">Waiting</div>
+          <div class="mini-links">
+            <a id="csvLink3" download>CSV</a>
+            <a id="pgmLink3" download>PGM</a>
+          </div>
+        </div>
+
+        <div class="tile" id="tile4">
+          <div class="tile-title">Picture 4</div>
+          <canvas id="canvas4"></canvas>
+          <div class="tile-status" id="status4">Waiting</div>
+          <div class="mini-links">
+            <a id="csvLink4" download>CSV</a>
+            <a id="pgmLink4" download>PGM</a>
+          </div>
+        </div>
+
+        <div class="tile" id="tile5">
+          <div class="tile-title">Picture 5</div>
+          <canvas id="canvas5"></canvas>
+          <div class="tile-status" id="status5">Waiting</div>
+          <div class="mini-links">
+            <a id="csvLink5" download>CSV</a>
+            <a id="pgmLink5" download>PGM</a>
+          </div>
+        </div>
+
+        <div class="tile" id="tile2">
+          <div class="tile-title">Picture 2</div>
+          <canvas id="canvas2"></canvas>
+          <div class="tile-status" id="status2">Waiting</div>
+          <div class="mini-links">
+            <a id="csvLink2" download>CSV</a>
+            <a id="pgmLink2" download>PGM</a>
+          </div>
+        </div>
+
+        <div class="tile" id="tile1">
+          <div class="tile-title">Picture 1</div>
+          <canvas id="canvas1"></canvas>
+          <div class="tile-status" id="status1">Waiting</div>
+          <div class="mini-links">
+            <a id="csvLink1" download>CSV</a>
+            <a id="pgmLink1" download>PGM</a>
+          </div>
+        </div>
+
+        <div class="tile" id="tile6">
+          <div class="tile-title">Picture 6</div>
+          <canvas id="canvas6"></canvas>
+          <div class="tile-status" id="status6">Waiting</div>
+          <div class="mini-links">
+            <a id="csvLink6" download>CSV</a>
+            <a id="pgmLink6" download>PGM</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="bulk-buttons">
+        <button id="downloadCsvBtn" disabled>Download All CSV Files</button>
+        <button id="downloadPgmBtn" disabled>Download All PGM Files</button>
+        <button id="downloadAllBtn" disabled>Download All Files</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Main Results</h2>
+
+      <div class="data-grid">
+        <div class="data-box">
+          <div class="label">Warmest Area</div>
+          <div id="maxTemp" class="value">-- °C</div>
+        </div>
+
+        <div class="data-box">
+          <div class="label">Coolest Area</div>
+          <div id="minTemp" class="value">-- °C</div>
+        </div>
+
+        <div class="data-box wide-box">
+          <div class="label">Estimated Mite / Infected Cell Count</div>
+          <div id="miteCount" class="value">--</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SERVICE_UUID = "12345678-1234-5678-1234-56789abcdef0";
+    const CHAR_UUID = "abcdef01-1234-5678-1234-56789abcdef0";
+
+    const connectBtn = document.getElementById("connectBtn");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const bluetoothMessageLog = document.getElementById("bluetoothMessageLog");
+
+    const maxTempBox = document.getElementById("maxTemp");
+    const minTempBox = document.getElementById("minTemp");
+    const miteCountBox = document.getElementById("miteCount");
+
+    const downloadCsvBtn = document.getElementById("downloadCsvBtn");
+    const downloadPgmBtn = document.getElementById("downloadPgmBtn");
+    const downloadAllBtn = document.getElementById("downloadAllBtn");
+
+    let latestData = {};
+    let fileTransfers = {};
+    let csvFiles = {};
+    let pgmFiles = {};
+
+    function setConnectionStatus(type, message) {
+      statusDot.className = "status-dot";
+
+      if (type === "connected") {
+        statusDot.classList.add("connected");
+      } else if (type === "warning") {
+        statusDot.classList.add("warning");
+      } else if (type === "error") {
+        statusDot.classList.add("error");
+      }
+
+      statusText.textContent = message;
+    }
+
+    function addBluetoothMessage(message) {
+      const entry = document.createElement("div");
+      entry.className = "message-entry";
+
+      const time = document.createElement("span");
+      time.className = "message-time";
+      time.textContent = new Date().toLocaleTimeString();
+
+      const text = document.createElement("span");
+      text.textContent = message;
+
+      entry.appendChild(time);
+      entry.appendChild(text);
+
+      bluetoothMessageLog.insertBefore(entry, bluetoothMessageLog.firstChild);
+
+      /*
+        Keep only the newest 30 messages so the page does not grow forever.
+      */
+      while (bluetoothMessageLog.children.length > 30) {
+        bluetoothMessageLog.removeChild(bluetoothMessageLog.lastChild);
+      }
+    }
+
+    function parseSensorMessage(message) {
+      const result = {};
+      const parts = message.trim().split(";");
+
+      parts.forEach(part => {
+        const cleanPart = part.trim();
+
+        if (cleanPart.length === 0) {
+          return;
+        }
+
+        const equalsIndex = cleanPart.indexOf("=");
+
+        if (equalsIndex === -1) {
+          result[cleanPart] = true;
+          return;
+        }
+
+        const key = cleanPart.substring(0, equalsIndex).trim();
+        const value = cleanPart.substring(equalsIndex + 1).trim();
+
+        result[key] = value;
+      });
+
+      return result;
+    }
+
+    function hasKey(data, key) {
+      return Object.prototype.hasOwnProperty.call(data, key);
+    }
+
+    function numberOrNull(value) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function setNumberIfPresent(data, key, element, decimals, suffix = "") {
+      if (!hasKey(data, key)) {
+        return;
+      }
+
+      const n = numberOrNull(data[key]);
+
+      if (n !== null) {
+        element.textContent = n.toFixed(decimals) + suffix;
+      }
+    }
+
+    function setIntegerIfPresent(data, key, element) {
+      if (!hasKey(data, key)) {
+        return;
+      }
+
+      const n = numberOrNull(data[key]);
+
+      if (n !== null) {
+        element.textContent = String(Math.round(n));
+      }
+    }
+
+    function getPictureNumber(data) {
+      const n = Number(data.PIC || data.PICTURE || data.INDEX || 0);
+
+      if (Number.isInteger(n) && n >= 1 && n <= 6) {
+        return n;
+      }
+
+      return 0;
+    }
+
+    function getTransferKey(tag, pic) {
+      return tag + "_" + String(pic);
+    }
+
+    function getPictureStatus(pic) {
+      return document.getElementById("status" + pic);
+    }
+
+    function setPictureStatus(pic, text) {
+      const status = getPictureStatus(pic);
+
+      if (status) {
+        status.textContent = text;
+      }
+    }
+
+    function base64ToBytes(base64Text) {
+      const binary = atob(base64Text);
+      const bytes = new Uint8Array(binary.length);
+
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      return bytes;
+    }
+
+    function makeDownloadLink(element, blob, filename, label) {
+      const oldUrl = element.dataset.url;
+
+      if (oldUrl) {
+        URL.revokeObjectURL(oldUrl);
+      }
+
+      const url = URL.createObjectURL(blob);
+
+      element.href = url;
+      element.dataset.url = url;
+      element.download = filename;
+      element.textContent = label;
+      element.style.display = "block";
+    }
+
+    function updateBulkButtons() {
+      const csvCount = Object.keys(csvFiles).length;
+      const pgmCount = Object.keys(pgmFiles).length;
+
+      downloadCsvBtn.disabled = csvCount === 0;
+      downloadPgmBtn.disabled = pgmCount === 0;
+      downloadAllBtn.disabled = csvCount + pgmCount === 0;
+    }
+
+    function downloadFileRecord(fileRecord) {
+      const a = document.createElement("a");
+      a.href = fileRecord.url;
+      a.download = fileRecord.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    function downloadFileList(fileList) {
+      fileList.forEach((fileRecord, index) => {
+        setTimeout(() => {
+          downloadFileRecord(fileRecord);
+        }, index * 300);
+      });
+    }
+
+    function orderedRecords(source) {
+      const records = [];
+
+      for (let pic = 1; pic <= 6; pic++) {
+        if (source[pic]) {
+          records.push(source[pic]);
+        }
+      }
+
+      return records;
+    }
+
+    downloadCsvBtn.addEventListener("click", () => {
+      downloadFileList(orderedRecords(csvFiles));
+    });
+
+    downloadPgmBtn.addEventListener("click", () => {
+      downloadFileList(orderedRecords(pgmFiles));
+    });
+
+    downloadAllBtn.addEventListener("click", () => {
+      downloadFileList(orderedRecords(csvFiles).concat(orderedRecords(pgmFiles)));
+    });
+
+    function readPgmToken(bytes, state) {
+      while (state.index < bytes.length) {
+        const ch = bytes[state.index];
+
+        if (ch === 35) {
+          while (state.index < bytes.length && bytes[state.index] !== 10) {
+            state.index++;
+          }
+        } else if (ch === 9 || ch === 10 || ch === 13 || ch === 32) {
+          state.index++;
+        } else {
+          break;
+        }
+      }
+
+      let token = "";
+
+      while (state.index < bytes.length) {
+        const ch = bytes[state.index];
+
+        if (ch === 9 || ch === 10 || ch === 13 || ch === 32) {
+          break;
+        }
+
+        token += String.fromCharCode(ch);
+        state.index++;
+      }
+
+      return token;
+    }
+
+    function drawPgmPreview(bytes, pic) {
+      const canvas = document.getElementById("canvas" + pic);
+
+      if (!canvas) {
+        return;
+      }
+
+      const state = { index: 0 };
+
+      const magic = readPgmToken(bytes, state);
+      const width = Number(readPgmToken(bytes, state));
+      const height = Number(readPgmToken(bytes, state));
+      const maxValue = Number(readPgmToken(bytes, state));
+
+      if (magic !== "P5" || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(maxValue)) {
+        setPictureStatus(pic, "PGM received, but preview format was not recognized.");
+        return;
+      }
+
+      while (
+        state.index < bytes.length &&
+        (bytes[state.index] === 9 ||
+         bytes[state.index] === 10 ||
+         bytes[state.index] === 13 ||
+         bytes[state.index] === 32)
+      ) {
+        state.index++;
+      }
+
+      const pixelStart = state.index;
+      const pixelCount = width * height;
+
+      if (bytes.length < pixelStart + pixelCount) {
+        setPictureStatus(pic, "PGM received, but image data was incomplete.");
+        return;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      canvas.style.display = "block";
+
+      const ctx = canvas.getContext("2d");
+      const imageData = ctx.createImageData(width, height);
+
+      for (let i = 0; i < pixelCount; i++) {
+        const gray = Math.round((bytes[pixelStart + i] * 255) / maxValue);
+        const outIndex = i * 4;
+
+        imageData.data[outIndex] = gray;
+        imageData.data[outIndex + 1] = gray;
+        imageData.data[outIndex + 2] = gray;
+        imageData.data[outIndex + 3] = 255;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    function updateUserDisplay(message) {
+      const data = parseSensorMessage(message);
+      latestData = Object.assign(latestData, data);
+
+      setNumberIfPresent(latestData, "MAX_TEMP", maxTempBox, 1, " °C");
+      setNumberIfPresent(latestData, "MIN_TEMP", minTempBox, 1, " °C");
+      setIntegerIfPresent(latestData, "MITE_COUNT", miteCountBox);
+
+      if (hasKey(data, "MESSAGE")) {
+        addBluetoothMessage(data.MESSAGE);
+      }
+    }
+
+    function handleFileMessage(message) {
+      const type = message.trim().split(";")[0];
+      const data = parseSensorMessage(message);
+      const tag = data.TAG || "UNKNOWN";
+      const pic = getPictureNumber(data);
+      const key = getTransferKey(tag, pic);
+
+      if (pic === 0) {
+        addBluetoothMessage("File message missing PIC number.");
+        return;
+      }
+
+      if (type === "FILE_BEGIN") {
+        fileTransfers[key] = {
+          tag: tag,
+          pic: pic,
+          name: data.NAME || (tag + "_picture_" + pic),
+          chunks: [],
+          receivedChunks: 0
+        };
+
+        setPictureStatus(pic, "Receiving " + tag + "...");
+        return;
+      }
+
+      if (type === "FILE_CHUNK") {
+        const transfer = fileTransfers[key];
+
+        if (!transfer) {
+          setPictureStatus(pic, "Chunk received before FILE_BEGIN.");
+          return;
+        }
+
+        const seq = Number(data.SEQ);
+
+        if (!Number.isFinite(seq)) {
+          setPictureStatus(pic, "Bad chunk sequence number.");
+          return;
+        }
+
+        transfer.chunks[seq] = data.DATA || "";
+        transfer.receivedChunks++;
+
+        if (transfer.receivedChunks % 10 === 0) {
+          setPictureStatus(pic, "Receiving " + transfer.tag + " (" + transfer.receivedChunks + " chunks)...");
+        }
+
+        return;
+      }
+
+      if (type === "FILE_END") {
+        const transfer = fileTransfers[key];
+
+        if (!transfer) {
+          setPictureStatus(pic, "FILE_END received before FILE_BEGIN.");
+          return;
+        }
+
+        const bytes = base64ToBytes(transfer.chunks.join(""));
+        let mimeType = "application/octet-stream";
+
+        if (tag === "RAW_CSV") {
+          mimeType = "text/csv";
+        } else if (tag === "PREVIEW_PGM") {
+          mimeType = "image/x-portable-graymap";
+        }
+
+        const blob = new Blob([bytes], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+
+        if (tag === "RAW_CSV") {
+          const link = document.getElementById("csvLink" + pic);
+
+          csvFiles[pic] = {
+            name: transfer.name,
+            blob: blob,
+            url: url
+          };
+
+          makeDownloadLink(link, blob, transfer.name, "CSV");
+          setPictureStatus(pic, "CSV received.");
+        } else if (tag === "PREVIEW_PGM") {
+          const link = document.getElementById("pgmLink" + pic);
+
+          pgmFiles[pic] = {
+            name: transfer.name,
+            blob: blob,
+            url: url
+          };
+
+          makeDownloadLink(link, blob, transfer.name, "PGM");
+          drawPgmPreview(bytes, pic);
+
+          if (csvFiles[pic]) {
+            setPictureStatus(pic, "CSV and PGM received.");
+          } else {
+            setPictureStatus(pic, "PGM received.");
+          }
+        }
+
+        delete fileTransfers[key];
+        updateBulkButtons();
+        return;
+      }
+
+      addBluetoothMessage("Unknown file message received.");
+    }
+
+    function handleBleMessage(message) {
+      if (message.startsWith("FILE_")) {
+        handleFileMessage(message);
+      } else {
+        updateUserDisplay(message);
+      }
+    }
+
+    function friendlyError(error) {
+      const text = String(error);
+
+      if (text.includes("User cancelled")) {
+        return "Connection was cancelled. Press the button again when you are ready.";
+      }
+
+      if (text.includes("Bluetooth adapter not available")) {
+        return "Bluetooth is turned off or unavailable on this computer.";
+      }
+
+      if (text.includes("No Services matching")) {
+        return "The hive sensor was found, but it is not sending the expected data format.";
+      }
+
+      if (text.includes("NetworkError")) {
+        return "The connection was lost. Move closer to the Raspberry Pi and try again.";
+      }
+
+      if (text.includes("NotFoundError")) {
+        return "No hive sensor was selected. Make sure BeeMonitor is running on the Raspberry Pi.";
+      }
+
+      return "Something went wrong while connecting. Restart the Raspberry Pi Bluetooth program and try again.";
+    }
+
+    connectBtn.addEventListener("click", async () => {
+      try {
+        connectBtn.disabled = true;
+        setConnectionStatus("warning", "Searching for hive sensor...");
+
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: "BeeMonitor" }],
+          optionalServices: [SERVICE_UUID]
+        });
+
+        setConnectionStatus("warning", "Connecting...");
+
+        device.addEventListener("gattserverdisconnected", () => {
+          connectBtn.disabled = false;
+          setConnectionStatus("error", "Disconnected");
+          addBluetoothMessage("Disconnected from Raspberry Pi.");
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(CHAR_UUID);
+
+        setConnectionStatus("connected", "Connected to hive sensor");
+
+        await characteristic.startNotifications();
+        await characteristic.readValue();
+
+        characteristic.addEventListener("characteristicvaluechanged", event => {
+          const value = event.target.value;
+          const message = new TextDecoder().decode(value);
+
+          handleBleMessage(message);
+        });
+
+        addBluetoothMessage("Connected.");
+
+      } catch (error) {
+        console.error(error);
+
+        connectBtn.disabled = false;
+        setConnectionStatus("error", "Connection problem");
+        addBluetoothMessage(friendlyError(error));
+      }
+    });
+  </script>
+</body>
+</html>
