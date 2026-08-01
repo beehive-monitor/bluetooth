@@ -182,72 +182,57 @@
     .file-grid {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
+      gap: 0;
       margin-top: 14px;
+      overflow: hidden;
     }
 
     .tile {
-      background: #fff8df;
-      border-radius: 14px;
-      padding: 10px;
-      text-align: center;
-      min-height: 138px;
-      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: #000;
+      aspect-ratio: 4 / 3;
+      overflow: hidden;
     }
 
     .tile-title {
-      font-size: 15px;
-      font-weight: bold;
-      margin-bottom: 6px;
+      display: none;
     }
 
     .tile canvas {
       display: none;
       width: 100%;
+      height: 100%;
       aspect-ratio: 4 / 3;
       image-rendering: pixelated;
-      border-radius: 8px;
+      border: 0;
+      border-radius: 0;
       background: black;
-      margin-bottom: 6px;
+      margin: 0;
+      padding: 0;
+      vertical-align: bottom;
     }
 
     .tile-status {
-      font-size: 12px;
-      color: #6b5a25;
-      min-height: 32px;
-    }
-
-    .mini-links {
-      display: flex;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .mini-links a {
       display: none;
-      flex: 1;
-      padding: 7px 4px;
-      border-radius: 8px;
-      background: #f5a400;
-      color: white;
-      text-align: center;
-      text-decoration: none;
-      font-size: 12px;
-      font-weight: bold;
     }
 
-    .bulk-buttons {
+    .file-buttons {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, 1fr);
       gap: 8px;
       margin-top: 14px;
     }
 
-    .bulk-buttons button {
+    .file-buttons button {
       margin-top: 0;
-      font-size: 15px;
-      padding: 13px;
+      padding: 12px 8px;
+      font-size: 14px;
+      border-radius: 12px;
     }
+
   </style>
 </head>
 
@@ -281,70 +266,42 @@
 
       <div class="file-grid">
         <div class="tile" id="tile3">
-          <div class="tile-title">Picture 3</div>
           <canvas id="canvas3"></canvas>
           <div class="tile-status" id="status3">Waiting</div>
-          <div class="mini-links">
-            <a id="csvLink3" download>CSV</a>
-            <a id="pgmLink3" download>PGM</a>
-          </div>
         </div>
 
         <div class="tile" id="tile4">
-          <div class="tile-title">Picture 4</div>
           <canvas id="canvas4"></canvas>
           <div class="tile-status" id="status4">Waiting</div>
-          <div class="mini-links">
-            <a id="csvLink4" download>CSV</a>
-            <a id="pgmLink4" download>PGM</a>
-          </div>
         </div>
 
         <div class="tile" id="tile5">
-          <div class="tile-title">Picture 5</div>
           <canvas id="canvas5"></canvas>
           <div class="tile-status" id="status5">Waiting</div>
-          <div class="mini-links">
-            <a id="csvLink5" download>CSV</a>
-            <a id="pgmLink5" download>PGM</a>
-          </div>
         </div>
 
         <div class="tile" id="tile2">
-          <div class="tile-title">Picture 2</div>
           <canvas id="canvas2"></canvas>
           <div class="tile-status" id="status2">Waiting</div>
-          <div class="mini-links">
-            <a id="csvLink2" download>CSV</a>
-            <a id="pgmLink2" download>PGM</a>
-          </div>
         </div>
 
         <div class="tile" id="tile1">
-          <div class="tile-title">Picture 1</div>
           <canvas id="canvas1"></canvas>
           <div class="tile-status" id="status1">Waiting</div>
-          <div class="mini-links">
-            <a id="csvLink1" download>CSV</a>
-            <a id="pgmLink1" download>PGM</a>
-          </div>
         </div>
 
         <div class="tile" id="tile6">
-          <div class="tile-title">Picture 6</div>
           <canvas id="canvas6"></canvas>
           <div class="tile-status" id="status6">Waiting</div>
-          <div class="mini-links">
-            <a id="csvLink6" download>CSV</a>
-            <a id="pgmLink6" download>PGM</a>
-          </div>
         </div>
       </div>
 
-      <div class="bulk-buttons">
-        <button id="downloadCsvBtn" disabled>Download All CSV Files</button>
-        <button id="downloadPgmBtn" disabled>Download All PGM Files</button>
-        <button id="downloadAllBtn" disabled>Download All Files</button>
+      <div class="file-buttons">
+        <button id="combinedCsvBtn" disabled>Combined CSV: Waiting</button>
+        <button id="combinedPgmBtn" disabled>Combined PGM: Waiting</button>
+      </div>
+      <div id="combineStatus" class="file-status">
+        Waiting for six CSV files and six PGM files.
       </div>
     </div>
 
@@ -383,14 +340,22 @@
     const minTempBox = document.getElementById("minTemp");
     const miteCountBox = document.getElementById("miteCount");
 
-    const downloadCsvBtn = document.getElementById("downloadCsvBtn");
-    const downloadPgmBtn = document.getElementById("downloadPgmBtn");
-    const downloadAllBtn = document.getElementById("downloadAllBtn");
+    const combinedCsvBtn = document.getElementById("combinedCsvBtn");
+    const combinedPgmBtn = document.getElementById("combinedPgmBtn");
+    const combineStatus = document.getElementById("combineStatus");
 
     let latestData = {};
     let fileTransfers = {};
     let csvFiles = {};
     let pgmFiles = {};
+    let combinedCsvFile = null;
+    let combinedPgmFile = null;
+    let csvBuildNumber = 0;
+
+    const STITCH_LAYOUT = [
+      [3, 4, 5],
+      [2, 1, 6]
+    ];
 
     function setConnectionStatus(type, message) {
       statusDot.className = "status-dot";
@@ -504,6 +469,14 @@
       return tag + "_" + String(pic);
     }
 
+    function isCsvTag(tag) {
+      return tag === "RAW_CSV" || tag === "CSV";
+    }
+
+    function isPgmTag(tag) {
+      return tag === "PREVIEW_PGM" || tag === "PGM";
+    }
+
     function getPictureStatus(pic) {
       return document.getElementById("status" + pic);
     }
@@ -527,31 +500,6 @@
       return bytes;
     }
 
-    function makeDownloadLink(element, blob, filename, label) {
-      const oldUrl = element.dataset.url;
-
-      if (oldUrl) {
-        URL.revokeObjectURL(oldUrl);
-      }
-
-      const url = URL.createObjectURL(blob);
-
-      element.href = url;
-      element.dataset.url = url;
-      element.download = filename;
-      element.textContent = label;
-      element.style.display = "block";
-    }
-
-    function updateBulkButtons() {
-      const csvCount = Object.keys(csvFiles).length;
-      const pgmCount = Object.keys(pgmFiles).length;
-
-      downloadCsvBtn.disabled = csvCount === 0;
-      downloadPgmBtn.disabled = pgmCount === 0;
-      downloadAllBtn.disabled = csvCount + pgmCount === 0;
-    }
-
     function downloadFileRecord(fileRecord) {
       const a = document.createElement("a");
       a.href = fileRecord.url;
@@ -561,36 +509,77 @@
       document.body.removeChild(a);
     }
 
-    function downloadFileList(fileList) {
-      fileList.forEach((fileRecord, index) => {
-        setTimeout(() => {
-          downloadFileRecord(fileRecord);
-        }, index * 300);
-      });
+    async function saveFileRecord(fileRecord) {
+      if (!fileRecord) {
+        alert("This file has not finished transferring.");
+        return;
+      }
+
+      const file = new File(
+        [fileRecord.blob],
+        fileRecord.name,
+        { type: fileRecord.blob.type || "application/octet-stream" }
+      );
+
+      /*
+        Bluefy/iPhone: use the iOS share sheet when file sharing is supported.
+        The user can then choose Save to Files.
+      */
+      try {
+        if (
+          navigator.share &&
+          navigator.canShare &&
+          navigator.canShare({ files: [file] })
+        ) {
+          await navigator.share({
+            files: [file],
+            title: fileRecord.name
+          });
+          return;
+        }
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          return;
+        }
+
+        console.warn("File sharing was unavailable; using browser download.", error);
+      }
+
+      /* Desktop/computer fallback. */
+      downloadFileRecord(fileRecord);
     }
 
-    function orderedRecords(source) {
-      const records = [];
+    function receivedCount(source) {
+      let count = 0;
 
       for (let pic = 1; pic <= 6; pic++) {
         if (source[pic]) {
-          records.push(source[pic]);
+          count++;
         }
       }
 
-      return records;
+      return count;
     }
 
-    downloadCsvBtn.addEventListener("click", () => {
-      downloadFileList(orderedRecords(csvFiles));
+    function allSixReady(source) {
+      return receivedCount(source) === 6;
+    }
+
+    function updateCombineStatus() {
+      const csvCount = receivedCount(csvFiles);
+      const pgmCount = receivedCount(pgmFiles);
+
+      combineStatus.textContent =
+        "Received " + csvCount + "/6 CSV files and " +
+        pgmCount + "/6 PGM files.";
+    }
+
+    combinedCsvBtn.addEventListener("click", () => {
+      saveFileRecord(combinedCsvFile);
     });
 
-    downloadPgmBtn.addEventListener("click", () => {
-      downloadFileList(orderedRecords(pgmFiles));
-    });
-
-    downloadAllBtn.addEventListener("click", () => {
-      downloadFileList(orderedRecords(csvFiles).concat(orderedRecords(pgmFiles)));
+    combinedPgmBtn.addEventListener("click", () => {
+      saveFileRecord(combinedPgmFile);
     });
 
     function readPgmToken(bytes, state) {
@@ -624,6 +613,254 @@
       return token;
     }
 
+    function parsePgmBytes(bytes) {
+      const state = { index: 0 };
+      const magic = readPgmToken(bytes, state);
+      const width = Number(readPgmToken(bytes, state));
+      const height = Number(readPgmToken(bytes, state));
+      const maxValue = Number(readPgmToken(bytes, state));
+
+      if (
+        magic !== "P5" ||
+        !Number.isInteger(width) || width <= 0 ||
+        !Number.isInteger(height) || height <= 0 ||
+        !Number.isInteger(maxValue) || maxValue <= 0 || maxValue > 65535
+      ) {
+        throw new Error("Unsupported PGM header.");
+      }
+
+      /* Move past the required separator after the maximum value. */
+      if (bytes[state.index] === 13 && bytes[state.index + 1] === 10) {
+        state.index += 2;
+      } else if (
+        bytes[state.index] === 9 ||
+        bytes[state.index] === 10 ||
+        bytes[state.index] === 13 ||
+        bytes[state.index] === 32
+      ) {
+        state.index++;
+      } else {
+        throw new Error("PGM header is missing its pixel-data separator.");
+      }
+
+      const bytesPerPixel = maxValue < 256 ? 1 : 2;
+      const requiredLength = width * height * bytesPerPixel;
+
+      if (bytes.length < state.index + requiredLength) {
+        throw new Error("PGM pixel data is incomplete.");
+      }
+
+      return {
+        width: width,
+        height: height,
+        maxValue: maxValue,
+        bytesPerPixel: bytesPerPixel,
+        pixels: bytes.slice(state.index, state.index + requiredLength)
+      };
+    }
+
+    function parseCsvGrid(text) {
+      const lines = text
+        .replace(/^\uFEFF/, "")
+        .split(/\r?\n/)
+        .filter(line => line.trim().length > 0);
+
+      if (lines.length === 0) {
+        throw new Error("A received CSV file was empty.");
+      }
+
+      const rows = lines.map(line => {
+        const cells = line.split(",");
+
+        while (cells.length > 0 && cells[cells.length - 1].trim() === "") {
+          cells.pop();
+        }
+
+        return cells;
+      });
+
+      const width = rows[0].length;
+
+      if (width === 0 || rows.some(row => row.length !== width)) {
+        throw new Error("A received CSV file was not a rectangular data grid.");
+      }
+
+      return rows;
+    }
+
+    function replaceCombinedRecord(oldRecord, blob, name) {
+      if (oldRecord && oldRecord.url) {
+        URL.revokeObjectURL(oldRecord.url);
+      }
+
+      return {
+        name: name,
+        blob: blob,
+        url: URL.createObjectURL(blob)
+      };
+    }
+
+    async function buildCombinedCsv() {
+      if (!allSixReady(csvFiles)) {
+        combinedCsvBtn.disabled = true;
+        combinedCsvBtn.textContent =
+          "Combined CSV: " + receivedCount(csvFiles) + "/6";
+        return;
+      }
+
+      const thisBuild = ++csvBuildNumber;
+      combinedCsvBtn.disabled = true;
+      combinedCsvBtn.textContent = "Combining CSV...";
+
+      try {
+        const textFiles = await Promise.all(
+          [1, 2, 3, 4, 5, 6].map(pic => csvFiles[pic].blob.text())
+        );
+
+        if (thisBuild !== csvBuildNumber) {
+          return;
+        }
+
+        const grids = {};
+
+        for (let pic = 1; pic <= 6; pic++) {
+          grids[pic] = parseCsvGrid(textFiles[pic - 1]);
+        }
+
+        const sourceHeight = grids[1].length;
+        const sourceWidth = grids[1][0].length;
+
+        for (let pic = 2; pic <= 6; pic++) {
+          if (
+            grids[pic].length !== sourceHeight ||
+            grids[pic][0].length !== sourceWidth
+          ) {
+            throw new Error("The six CSV files do not have matching dimensions.");
+          }
+        }
+
+        const outputRows = [];
+
+        for (const pictureRow of STITCH_LAYOUT) {
+          for (let row = 0; row < sourceHeight; row++) {
+            const outputCells = [];
+
+            for (const pic of pictureRow) {
+              outputCells.push(...grids[pic][row]);
+            }
+
+            outputRows.push(outputCells.join(","));
+          }
+        }
+
+        const csvText = outputRows.join("\r\n") + "\r\n";
+        const blob = new Blob([csvText], { type: "text/csv" });
+
+        combinedCsvFile = replaceCombinedRecord(
+          combinedCsvFile,
+          blob,
+          "combined_thermal_scan.csv"
+        );
+
+        combinedCsvBtn.disabled = false;
+        combinedCsvBtn.textContent = "Save Combined CSV";
+        addBluetoothMessage(
+          "Combined CSV is ready (" +
+          (sourceWidth * 3) + " columns × " +
+          (sourceHeight * 2) + " rows)."
+        );
+      } catch (error) {
+        console.error(error);
+        combinedCsvBtn.disabled = true;
+        combinedCsvBtn.textContent = "CSV combine error";
+        addBluetoothMessage("Could not combine CSV files: " + error.message);
+      }
+    }
+
+    function buildCombinedPgm() {
+      if (!allSixReady(pgmFiles)) {
+        combinedPgmBtn.disabled = true;
+        combinedPgmBtn.textContent =
+          "Combined PGM: " + receivedCount(pgmFiles) + "/6";
+        return;
+      }
+
+      combinedPgmBtn.disabled = true;
+      combinedPgmBtn.textContent = "Combining PGM...";
+
+      try {
+        const images = {};
+
+        for (let pic = 1; pic <= 6; pic++) {
+          images[pic] = parsePgmBytes(pgmFiles[pic].bytes);
+        }
+
+        const sourceWidth = images[1].width;
+        const sourceHeight = images[1].height;
+        const maxValue = images[1].maxValue;
+        const bytesPerPixel = images[1].bytesPerPixel;
+
+        for (let pic = 2; pic <= 6; pic++) {
+          if (
+            images[pic].width !== sourceWidth ||
+            images[pic].height !== sourceHeight ||
+            images[pic].maxValue !== maxValue ||
+            images[pic].bytesPerPixel !== bytesPerPixel
+          ) {
+            throw new Error("The six PGM files do not have matching formats.");
+          }
+        }
+
+        const outputWidth = sourceWidth * 3;
+        const outputHeight = sourceHeight * 2;
+        const outputPixels = new Uint8Array(
+          outputWidth * outputHeight * bytesPerPixel
+        );
+        let outputIndex = 0;
+
+        for (const pictureRow of STITCH_LAYOUT) {
+          for (let row = 0; row < sourceHeight; row++) {
+            for (const pic of pictureRow) {
+              const sourceStart = row * sourceWidth * bytesPerPixel;
+              const sourceEnd = sourceStart + sourceWidth * bytesPerPixel;
+
+              outputPixels.set(
+                images[pic].pixels.subarray(sourceStart, sourceEnd),
+                outputIndex
+              );
+              outputIndex += sourceWidth * bytesPerPixel;
+            }
+          }
+        }
+
+        const header = new TextEncoder().encode(
+          "P5\n" + outputWidth + " " + outputHeight + "\n" + maxValue + "\n"
+        );
+        const blob = new Blob(
+          [header, outputPixels],
+          { type: "image/x-portable-graymap" }
+        );
+
+        combinedPgmFile = replaceCombinedRecord(
+          combinedPgmFile,
+          blob,
+          "combined_thermal_scan.pgm"
+        );
+
+        combinedPgmBtn.disabled = false;
+        combinedPgmBtn.textContent = "Save Combined PGM";
+        addBluetoothMessage(
+          "Combined PGM is ready (" +
+          outputWidth + " × " + outputHeight + " pixels)."
+        );
+      } catch (error) {
+        console.error(error);
+        combinedPgmBtn.disabled = true;
+        combinedPgmBtn.textContent = "PGM combine error";
+        addBluetoothMessage("Could not combine PGM files: " + error.message);
+      }
+    }
+
     function drawPgmPreview(bytes, pic) {
       const canvas = document.getElementById("canvas" + pic);
 
@@ -631,45 +868,33 @@
         return;
       }
 
-      const state = { index: 0 };
+      let pgm;
 
-      const magic = readPgmToken(bytes, state);
-      const width = Number(readPgmToken(bytes, state));
-      const height = Number(readPgmToken(bytes, state));
-      const maxValue = Number(readPgmToken(bytes, state));
-
-      if (magic !== "P5" || !Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(maxValue)) {
-        setPictureStatus(pic, "PGM received, but preview format was not recognized.");
+      try {
+        pgm = parsePgmBytes(bytes);
+      } catch (error) {
+        setPictureStatus(pic, "PGM preview error: " + error.message);
         return;
       }
 
-      while (
-        state.index < bytes.length &&
-        (bytes[state.index] === 9 ||
-         bytes[state.index] === 10 ||
-         bytes[state.index] === 13 ||
-         bytes[state.index] === 32)
-      ) {
-        state.index++;
-      }
-
-      const pixelStart = state.index;
-      const pixelCount = width * height;
-
-      if (bytes.length < pixelStart + pixelCount) {
-        setPictureStatus(pic, "PGM received, but image data was incomplete.");
-        return;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = pgm.width;
+      canvas.height = pgm.height;
       canvas.style.display = "block";
 
       const ctx = canvas.getContext("2d");
-      const imageData = ctx.createImageData(width, height);
+      const imageData = ctx.createImageData(pgm.width, pgm.height);
+      const pixelCount = pgm.width * pgm.height;
 
       for (let i = 0; i < pixelCount; i++) {
-        const gray = Math.round((bytes[pixelStart + i] * 255) / maxValue);
+        let value;
+
+        if (pgm.bytesPerPixel === 1) {
+          value = pgm.pixels[i];
+        } else {
+          value = (pgm.pixels[i * 2] << 8) | pgm.pixels[i * 2 + 1];
+        }
+
+        const gray = Math.round((value * 255) / pgm.maxValue);
         const outIndex = i * 4;
 
         imageData.data[outIndex] = gray;
@@ -697,7 +922,7 @@
     function handleFileMessage(message) {
       const type = message.trim().split(";")[0];
       const data = parseSensorMessage(message);
-      const tag = data.TAG || "UNKNOWN";
+      const tag = String(data.TAG || "UNKNOWN").toUpperCase();
       const pic = getPictureNumber(data);
       const key = getTransferKey(tag, pic);
 
@@ -716,6 +941,16 @@
         };
 
         setPictureStatus(pic, "Receiving " + tag + "...");
+
+        if (isCsvTag(tag)) {
+          combinedCsvBtn.disabled = true;
+          combinedCsvBtn.textContent = "Receiving CSV " + pic + "...";
+        } else if (isPgmTag(tag)) {
+          combinedPgmBtn.disabled = true;
+          combinedPgmBtn.textContent = "Receiving PGM " + pic + "...";
+        }
+
+        addBluetoothMessage("Receiving " + tag + " file " + pic + ".");
         return;
       }
 
@@ -755,17 +990,19 @@
         const bytes = base64ToBytes(transfer.chunks.join(""));
         let mimeType = "application/octet-stream";
 
-        if (tag === "RAW_CSV") {
+        if (isCsvTag(tag)) {
           mimeType = "text/csv";
-        } else if (tag === "PREVIEW_PGM") {
+        } else if (isPgmTag(tag)) {
           mimeType = "image/x-portable-graymap";
         }
 
         const blob = new Blob([bytes], { type: mimeType });
         const url = URL.createObjectURL(blob);
 
-        if (tag === "RAW_CSV") {
-          const link = document.getElementById("csvLink" + pic);
+        if (isCsvTag(tag)) {
+          if (csvFiles[pic] && csvFiles[pic].url) {
+            URL.revokeObjectURL(csvFiles[pic].url);
+          }
 
           csvFiles[pic] = {
             name: transfer.name,
@@ -773,19 +1010,23 @@
             url: url
           };
 
-          makeDownloadLink(link, blob, transfer.name, "CSV");
           setPictureStatus(pic, "CSV received.");
-        } else if (tag === "PREVIEW_PGM") {
-          const link = document.getElementById("pgmLink" + pic);
+          addBluetoothMessage("CSV file " + pic + " received.");
+          buildCombinedCsv();
+        } else if (isPgmTag(tag)) {
+          if (pgmFiles[pic] && pgmFiles[pic].url) {
+            URL.revokeObjectURL(pgmFiles[pic].url);
+          }
 
           pgmFiles[pic] = {
             name: transfer.name,
             blob: blob,
-            url: url
+            url: url,
+            bytes: bytes
           };
 
-          makeDownloadLink(link, blob, transfer.name, "PGM");
           drawPgmPreview(bytes, pic);
+          buildCombinedPgm();
 
           if (csvFiles[pic]) {
             setPictureStatus(pic, "CSV and PGM received.");
@@ -795,7 +1036,7 @@
         }
 
         delete fileTransfers[key];
-        updateBulkButtons();
+        updateCombineStatus();
         return;
       }
 
