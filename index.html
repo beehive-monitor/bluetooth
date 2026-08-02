@@ -926,6 +926,7 @@
           tag: tag,
           pic: pic,
           name: data.NAME || (tag + "_picture_" + pic),
+          size: Number(data.SIZE),
           chunks: [],
           receivedChunks: 0
         };
@@ -981,8 +982,69 @@
           return;
         }
 
+        const expectedChunks = Number(data.CHUNKS);
+        let transferError = "";
+
+        if (!Number.isInteger(expectedChunks) || expectedChunks < 0) {
+          transferError = "FILE_END had an invalid chunk count.";
+        } else {
+          for (let seq = 0; seq < expectedChunks; seq++) {
+            if (typeof transfer.chunks[seq] !== "string") {
+              transferError =
+                "Transfer incomplete: missing chunk " + seq +
+                " of " + expectedChunks + ".";
+              break;
+            }
+          }
+        }
+
+        if (transferError) {
+          setPictureStatus(pic, transferError);
+          if (isCsvTag(tag)) {
+            combinedCsvBtn.disabled = true;
+            combinedCsvBtn.textContent = "CSV transfer incomplete";
+          } else if (isPgmTag(tag)) {
+            combinedPgmBtn.disabled = true;
+            combinedPgmBtn.textContent = "PGM transfer incomplete";
+          }
+          addBluetoothMessage(transferError + " Please run the scan again.");
+          delete fileTransfers[key];
+          return;
+        }
+
         const bytes = base64ToBytes(transfer.chunks.join(""));
+
+        if (
+          Number.isInteger(transfer.size) && transfer.size >= 0 &&
+          bytes.length !== transfer.size
+        ) {
+          const sizeError =
+            "Transfer incomplete: expected " + transfer.size +
+            " bytes but received " + bytes.length + ".";
+          setPictureStatus(pic, sizeError);
+          if (isCsvTag(tag)) {
+            combinedCsvBtn.disabled = true;
+            combinedCsvBtn.textContent = "CSV transfer incomplete";
+          } else if (isPgmTag(tag)) {
+            combinedPgmBtn.disabled = true;
+            combinedPgmBtn.textContent = "PGM transfer incomplete";
+          }
+          addBluetoothMessage(sizeError + " Please run the scan again.");
+          delete fileTransfers[key];
+          return;
+        }
+
         let mimeType = "application/octet-stream";
+
+        if (isCsvTag(tag)) {
+          mimeType = "text/csv";
+        } else if (isPgmTag(tag)) {
+          mimeType = "image/x-portable-graymap";
+        }
+
+        /* Create the file before storing it in either file record. */
+        const blob = new Blob([bytes], { type: mimeType });
+        const url = URL.createObjectURL(blob);
 
         if (tag === "COMBINED_CSV") {
           if (combinedCsvFile && combinedCsvFile.url) {
@@ -1017,15 +1079,6 @@
             : "Combined PGM received; waiting for combined CSV.";
           addBluetoothMessage("Combined PGM received (526 × 225 pixels).");
         } else if (isCsvTag(tag)) {
-          mimeType = "text/csv";
-        } else if (isPgmTag(tag)) {
-          mimeType = "image/x-portable-graymap";
-        }
-
-        const blob = new Blob([bytes], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-
-        if (isCsvTag(tag)) {
           if (csvFiles[pic] && csvFiles[pic].url) {
             URL.revokeObjectURL(csvFiles[pic].url);
           }
