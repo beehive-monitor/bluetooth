@@ -181,7 +181,7 @@
 
     .file-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: 1fr;
       gap: 0;
       margin-top: 14px;
       overflow: hidden;
@@ -193,7 +193,7 @@
       border: 0;
       border-radius: 0;
       background: #000;
-      aspect-ratio: 4 / 3;
+      aspect-ratio: 526 / 225;
       overflow: hidden;
     }
 
@@ -205,7 +205,7 @@
       display: none;
       width: 100%;
       height: 100%;
-      aspect-ratio: 4 / 3;
+      aspect-ratio: 526 / 225;
       image-rendering: pixelated;
       border: 0;
       border-radius: 0;
@@ -265,46 +265,10 @@
       <h2>Received Files</h2>
 
       <div class="file-grid">
-        <div class="tile" id="tile5">
-          <canvas id="canvas5"></canvas>
-          <div class="tile-status" id="status5">Waiting</div>
+        <div class="tile" id="tileCombined">
+          <canvas id="canvasCombined"></canvas>
+          <div class="tile-status" id="statusCombined">Waiting</div>
         </div>
-
-        <div class="tile" id="tile6">
-          <canvas id="canvas6"></canvas>
-          <div class="tile-status" id="status6">Waiting</div>
-        </div>
-
-        <div class="tile" id="tile7">
-          <canvas id="canvas7"></canvas>
-          <div class="tile-status" id="status7">Waiting</div>
-        </div>
-
-        <div class="tile" id="tile8">
-          <canvas id="canvas8"></canvas>
-          <div class="tile-status" id="status8">Waiting</div>
-        </div>
-
-        <div class="tile" id="tile4">
-          <canvas id="canvas4"></canvas>
-          <div class="tile-status" id="status4">Waiting</div>
-        </div>
-
-        <div class="tile" id="tile3">
-          <canvas id="canvas3"></canvas>
-          <div class="tile-status" id="status3">Waiting</div>
-        </div>
-
-        <div class="tile" id="tile2">
-          <canvas id="canvas2"></canvas>
-          <div class="tile-status" id="status2">Waiting</div>
-        </div>
-
-        <div class="tile" id="tile1">
-          <canvas id="canvas1"></canvas>
-          <div class="tile-status" id="status1">Waiting</div>
-        </div>
-
       </div>
 
       <div class="file-buttons">
@@ -312,7 +276,7 @@
         <button id="combinedPgmBtn" disabled>Combined PGM: Waiting</button>
       </div>
       <div id="combineStatus" class="file-status">
-        Waiting for eight CSV files and eight PGM files.
+        Waiting for the combined CSV and combined PGM from the Raspberry Pi.
       </div>
     </div>
 
@@ -482,11 +446,15 @@
     }
 
     function isCsvTag(tag) {
-      return tag === "RAW_CSV" || tag === "CSV";
+      return tag === "RAW_CSV" || tag === "CSV" || tag === "COMBINED_CSV";
     }
 
     function isPgmTag(tag) {
-      return tag === "PREVIEW_PGM" || tag === "PGM";
+      return tag === "PREVIEW_PGM" || tag === "PGM" || tag === "COMBINED_PGM";
+    }
+
+    function isCombinedTag(tag) {
+      return tag === "COMBINED_CSV" || tag === "COMBINED_PGM";
     }
 
     function getPictureStatus(pic) {
@@ -494,6 +462,11 @@
     }
 
     function setPictureStatus(pic, text) {
+      if (pic === 0) {
+        combineStatus.textContent = text;
+        return;
+      }
+
       const status = getPictureStatus(pic);
 
       if (status) {
@@ -877,7 +850,9 @@
     }
 
     function drawPgmPreview(bytes, pic) {
-      const canvas = document.getElementById("canvas" + pic);
+      const canvas = document.getElementById(
+        pic === 0 ? "canvasCombined" : "canvas" + pic
+      );
 
       if (!canvas) {
         return;
@@ -941,7 +916,7 @@
       const pic = getPictureNumber(data);
       const key = getTransferKey(tag, pic);
 
-      if (pic === 0) {
+      if (pic === 0 && !isCombinedTag(tag)) {
         addBluetoothMessage("File message missing PIC number.");
         return;
       }
@@ -959,10 +934,14 @@
 
         if (isCsvTag(tag)) {
           combinedCsvBtn.disabled = true;
-          combinedCsvBtn.textContent = "Receiving CSV " + pic + "...";
+          combinedCsvBtn.textContent = isCombinedTag(tag)
+            ? "Receiving Combined CSV..."
+            : "Receiving CSV " + pic + "...";
         } else if (isPgmTag(tag)) {
           combinedPgmBtn.disabled = true;
-          combinedPgmBtn.textContent = "Receiving PGM " + pic + "...";
+          combinedPgmBtn.textContent = isCombinedTag(tag)
+            ? "Receiving Combined PGM..."
+            : "Receiving PGM " + pic + "...";
         }
 
 
@@ -1005,7 +984,39 @@
         const bytes = base64ToBytes(transfer.chunks.join(""));
         let mimeType = "application/octet-stream";
 
-        if (isCsvTag(tag)) {
+        if (tag === "COMBINED_CSV") {
+          if (combinedCsvFile && combinedCsvFile.url) {
+            URL.revokeObjectURL(combinedCsvFile.url);
+          }
+
+          combinedCsvFile = {
+            name: transfer.name,
+            blob: blob,
+            url: url
+          };
+          combinedCsvBtn.disabled = false;
+          combinedCsvBtn.textContent = "Save Combined CSV";
+          combineStatus.textContent = "Combined CSV received; waiting for combined PGM.";
+          addBluetoothMessage("Combined CSV received.");
+        } else if (tag === "COMBINED_PGM") {
+          if (combinedPgmFile && combinedPgmFile.url) {
+            URL.revokeObjectURL(combinedPgmFile.url);
+          }
+
+          combinedPgmFile = {
+            name: transfer.name,
+            blob: blob,
+            url: url,
+            bytes: bytes
+          };
+          combinedPgmBtn.disabled = false;
+          combinedPgmBtn.textContent = "Save Combined PGM";
+          drawPgmPreview(bytes, 0);
+          combineStatus.textContent = combinedCsvFile
+            ? "Combined CSV and PGM received."
+            : "Combined PGM received; waiting for combined CSV.";
+          addBluetoothMessage("Combined PGM received (526 × 225 pixels).");
+        } else if (isCsvTag(tag)) {
           mimeType = "text/csv";
         } else if (isPgmTag(tag)) {
           mimeType = "image/x-portable-graymap";
@@ -1051,7 +1062,9 @@
         }
 
         delete fileTransfers[key];
-        updateCombineStatus();
+        if (!isCombinedTag(tag)) {
+          updateCombineStatus();
+        }
         return;
       }
 
