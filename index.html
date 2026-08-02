@@ -181,7 +181,7 @@
 
     .file-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-columns: repeat(4, 1fr);
       gap: 0;
       margin-top: 14px;
       overflow: hidden;
@@ -265,9 +265,24 @@
       <h2>Received Files</h2>
 
       <div class="file-grid">
-        <div class="tile" id="tile3">
-          <canvas id="canvas3"></canvas>
-          <div class="tile-status" id="status3">Waiting</div>
+        <div class="tile" id="tile5">
+          <canvas id="canvas5"></canvas>
+          <div class="tile-status" id="status5">Waiting</div>
+        </div>
+
+        <div class="tile" id="tile6">
+          <canvas id="canvas6"></canvas>
+          <div class="tile-status" id="status6">Waiting</div>
+        </div>
+
+        <div class="tile" id="tile7">
+          <canvas id="canvas7"></canvas>
+          <div class="tile-status" id="status7">Waiting</div>
+        </div>
+
+        <div class="tile" id="tile8">
+          <canvas id="canvas8"></canvas>
+          <div class="tile-status" id="status8">Waiting</div>
         </div>
 
         <div class="tile" id="tile4">
@@ -275,9 +290,9 @@
           <div class="tile-status" id="status4">Waiting</div>
         </div>
 
-        <div class="tile" id="tile5">
-          <canvas id="canvas5"></canvas>
-          <div class="tile-status" id="status5">Waiting</div>
+        <div class="tile" id="tile3">
+          <canvas id="canvas3"></canvas>
+          <div class="tile-status" id="status3">Waiting</div>
         </div>
 
         <div class="tile" id="tile2">
@@ -290,10 +305,6 @@
           <div class="tile-status" id="status1">Waiting</div>
         </div>
 
-        <div class="tile" id="tile6">
-          <canvas id="canvas6"></canvas>
-          <div class="tile-status" id="status6">Waiting</div>
-        </div>
       </div>
 
       <div class="file-buttons">
@@ -301,7 +312,7 @@
         <button id="combinedPgmBtn" disabled>Combined PGM: Waiting</button>
       </div>
       <div id="combineStatus" class="file-status">
-        Waiting for six CSV files and six PGM files.
+        Waiting for eight CSV files and eight PGM files.
       </div>
     </div>
 
@@ -352,9 +363,10 @@
     let combinedPgmFile = null;
     let csvBuildNumber = 0;
 
+    const PICTURE_COUNT = 8;
     const STITCH_LAYOUT = [
-      [3, 4, 5],
-      [2, 1, 6]
+      [5, 6, 7, 8],
+      [4, 3, 2, 1]
     ];
 
     function setConnectionStatus(type, message) {
@@ -458,7 +470,7 @@
     function getPictureNumber(data) {
       const n = Number(data.PIC || data.PICTURE || data.INDEX || 0);
 
-      if (Number.isInteger(n) && n >= 1 && n <= 6) {
+      if (Number.isInteger(n) && n >= 1 && n <= PICTURE_COUNT) {
         return n;
       }
 
@@ -552,7 +564,7 @@
     function receivedCount(source) {
       let count = 0;
 
-      for (let pic = 1; pic <= 6; pic++) {
+      for (let pic = 1; pic <= PICTURE_COUNT; pic++) {
         if (source[pic]) {
           count++;
         }
@@ -561,8 +573,8 @@
       return count;
     }
 
-    function allSixReady(source) {
-      return receivedCount(source) === 6;
+    function allPicturesReady(source) {
+      return receivedCount(source) === PICTURE_COUNT;
     }
 
     function updateCombineStatus() {
@@ -570,8 +582,8 @@
       const pgmCount = receivedCount(pgmFiles);
 
       combineStatus.textContent =
-        "Received " + csvCount + "/6 CSV files and " +
-        pgmCount + "/6 PGM files.";
+        "Received " + csvCount + "/" + PICTURE_COUNT + " CSV files and " +
+        pgmCount + "/" + PICTURE_COUNT + " PGM files.";
     }
 
     combinedCsvBtn.addEventListener("click", () => {
@@ -701,10 +713,10 @@
     }
 
     async function buildCombinedCsv() {
-      if (!allSixReady(csvFiles)) {
+      if (!allPicturesReady(csvFiles)) {
         combinedCsvBtn.disabled = true;
         combinedCsvBtn.textContent =
-          "Combined CSV: " + receivedCount(csvFiles) + "/6";
+          "Combined CSV: " + receivedCount(csvFiles) + "/" + PICTURE_COUNT;
         return;
       }
 
@@ -714,7 +726,10 @@
 
       try {
         const textFiles = await Promise.all(
-          [1, 2, 3, 4, 5, 6].map(pic => csvFiles[pic].blob.text())
+          Array.from(
+            { length: PICTURE_COUNT },
+            (_, index) => csvFiles[index + 1].blob.text()
+          )
         );
 
         if (thisBuild !== csvBuildNumber) {
@@ -723,19 +738,19 @@
 
         const grids = {};
 
-        for (let pic = 1; pic <= 6; pic++) {
+        for (let pic = 1; pic <= PICTURE_COUNT; pic++) {
           grids[pic] = parseCsvGrid(textFiles[pic - 1]);
         }
 
         const sourceHeight = grids[1].length;
         const sourceWidth = grids[1][0].length;
 
-        for (let pic = 2; pic <= 6; pic++) {
+        for (let pic = 2; pic <= PICTURE_COUNT; pic++) {
           if (
             grids[pic].length !== sourceHeight ||
             grids[pic][0].length !== sourceWidth
           ) {
-            throw new Error("The six CSV files do not have matching dimensions.");
+            throw new Error("The eight CSV files do not have matching dimensions.");
           }
         }
 
@@ -766,7 +781,7 @@
         combinedCsvBtn.textContent = "Save Combined CSV";
         addBluetoothMessage(
           "Combined CSV is ready (" +
-          (sourceWidth * 3) + " columns × " +
+          (sourceWidth * 4) + " columns × " +
           (sourceHeight * 2) + " rows)."
         );
       } catch (error) {
@@ -778,10 +793,10 @@
     }
 
     function buildCombinedPgm() {
-      if (!allSixReady(pgmFiles)) {
+      if (!allPicturesReady(pgmFiles)) {
         combinedPgmBtn.disabled = true;
         combinedPgmBtn.textContent =
-          "Combined PGM: " + receivedCount(pgmFiles) + "/6";
+          "Combined PGM: " + receivedCount(pgmFiles) + "/" + PICTURE_COUNT;
         return;
       }
 
@@ -791,7 +806,7 @@
       try {
         const images = {};
 
-        for (let pic = 1; pic <= 6; pic++) {
+        for (let pic = 1; pic <= PICTURE_COUNT; pic++) {
           images[pic] = parsePgmBytes(pgmFiles[pic].bytes);
         }
 
@@ -800,18 +815,18 @@
         const maxValue = images[1].maxValue;
         const bytesPerPixel = images[1].bytesPerPixel;
 
-        for (let pic = 2; pic <= 6; pic++) {
+        for (let pic = 2; pic <= PICTURE_COUNT; pic++) {
           if (
             images[pic].width !== sourceWidth ||
             images[pic].height !== sourceHeight ||
             images[pic].maxValue !== maxValue ||
             images[pic].bytesPerPixel !== bytesPerPixel
           ) {
-            throw new Error("The six PGM files do not have matching formats.");
+            throw new Error("The eight PGM files do not have matching formats.");
           }
         }
 
-        const outputWidth = sourceWidth * 3;
+        const outputWidth = sourceWidth * 4;
         const outputHeight = sourceHeight * 2;
         const outputPixels = new Uint8Array(
           outputWidth * outputHeight * bytesPerPixel
