@@ -969,14 +969,6 @@
             CHAR_UUID
           );
 
-        setConnectionStatus(
-          "connected",
-          "Connected to hive sensor"
-        );
-
-        await characteristic.startNotifications();
-        await characteristic.readValue();
-
         characteristic.addEventListener(
           "characteristicvaluechanged",
           event => {
@@ -986,6 +978,19 @@
 
             handleBleMessage(message);
           }
+        );
+
+        /*
+         * Install the listener before enabling notifications and before the
+         * read request creates the Pi-side connected flag. This prevents the
+         * first messages from arriving before the website is ready.
+         */
+        await characteristic.startNotifications();
+        await characteristic.readValue();
+
+        setConnectionStatus(
+          "connected",
+          "Connected to hive sensor"
         );
 
         addBluetoothMessage("Connected.");
