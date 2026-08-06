@@ -432,9 +432,8 @@
 
     /*
      * Direct browser download only.
-     *
-     * This function uses only a standard browser download, so clicking either
-     * file button no longer intentionally opens the phone share sheet.
+     * The object URL is created when the file finishes transferring, so the
+     * button click can start the download immediately.
      */
     function downloadFileRecord(fileRecord) {
       if (!fileRecord) {
@@ -442,25 +441,14 @@
         return;
       }
 
-      const temporaryUrl =
-        URL.createObjectURL(fileRecord.blob);
       const link = document.createElement("a");
-
-      link.href = temporaryUrl;
+      link.href = fileRecord.url;
       link.download = fileRecord.name || "download";
       link.style.display = "none";
 
       document.body.appendChild(link);
       link.click();
       link.remove();
-
-      /*
-       * Leave the object URL alive briefly so mobile browsers have time
-       * to begin processing the download before it is released.
-       */
-      window.setTimeout(() => {
-        URL.revokeObjectURL(temporaryUrl);
-      }, 30000);
     }
 
     combinedCsvBtn.addEventListener("click", () => {
@@ -747,7 +735,7 @@
 
         transfer.chunks[seq] = data.DATA || "";
 
-        if (transfer.receivedChunks % 10 === 0) {
+        if (transfer.receivedChunks % 100 === 0) {
           const label = isCsvTag(tag)
             ? "Combined CSV"
             : "Combined PGM";
@@ -814,9 +802,14 @@
             { type: "text/csv" }
           );
 
+          if (combinedCsvFile && combinedCsvFile.url) {
+            URL.revokeObjectURL(combinedCsvFile.url);
+          }
+
           combinedCsvFile = {
             name: transfer.name,
-            blob: blob
+            blob: blob,
+            url: URL.createObjectURL(blob)
           };
 
           combinedCsvBtn.disabled = false;
@@ -834,9 +827,14 @@
             }
           );
 
+          if (combinedPgmFile && combinedPgmFile.url) {
+            URL.revokeObjectURL(combinedPgmFile.url);
+          }
+
           combinedPgmFile = {
             name: transfer.name,
             blob: blob,
+            url: URL.createObjectURL(blob),
             bytes: bytes
           };
 
