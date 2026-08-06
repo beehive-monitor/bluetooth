@@ -139,6 +139,12 @@
       font-weight: bold;
     }
 
+    .help-text {
+      font-size: 14px;
+      color: #6b5a25;
+      line-height: 1.5;
+    }
+
     .message-log {
       max-height: 180px;
       overflow-y: auto;
@@ -174,18 +180,43 @@
     }
 
     .file-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
       margin-top: 14px;
       overflow: hidden;
-      background: #000;
-      border-radius: 12px;
     }
 
-    .file-grid canvas {
+    .tile {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: #000;
+      aspect-ratio: 526 / 225;
+      overflow: hidden;
+    }
+
+    .tile-title {
+      display: none;
+    }
+
+    .tile canvas {
       display: none;
       width: 100%;
-      height: auto;
+      height: 100%;
+      aspect-ratio: 526 / 225;
       image-rendering: pixelated;
+      border: 0;
+      border-radius: 0;
+      background: black;
+      margin: 0;
+      padding: 0;
       vertical-align: bottom;
+    }
+
+    .tile-status {
+      display: none;
     }
 
     .file-buttons {
@@ -201,6 +232,7 @@
       font-size: 14px;
       border-radius: 12px;
     }
+
   </style>
 </head>
 
@@ -224,7 +256,8 @@
     <div class="card">
       <h2>Bluetooth Messages</h2>
       <div id="bluetoothMessageLog" class="message-log">
-        <div class="message-entry"></div>
+        <div class="message-entry">
+        </div>
       </div>
     </div>
 
@@ -232,16 +265,18 @@
       <h2>Received Files</h2>
 
       <div class="file-grid">
-        <canvas id="combinedCanvas"></canvas>
+        <div class="tile" id="tileCombined">
+          <canvas id="canvasCombined"></canvas>
+          <div class="tile-status" id="statusCombined">Waiting</div>
+        </div>
       </div>
 
       <div class="file-buttons">
         <button id="combinedCsvBtn" disabled>Combined CSV: Waiting</button>
         <button id="combinedPgmBtn" disabled>Combined PGM: Waiting</button>
       </div>
-
       <div id="combineStatus" class="file-status">
-        Waiting for the combined CSV and PGM from the Raspberry Pi.
+        Waiting for the combined CSV and combined PGM from the Raspberry Pi.
       </div>
     </div>
 
@@ -274,8 +309,7 @@
     const connectBtn = document.getElementById("connectBtn");
     const statusDot = document.getElementById("statusDot");
     const statusText = document.getElementById("statusText");
-    const bluetoothMessageLog =
-      document.getElementById("bluetoothMessageLog");
+    const bluetoothMessageLog = document.getElementById("bluetoothMessageLog");
 
     const maxTempBox = document.getElementById("maxTemp");
     const minTempBox = document.getElementById("minTemp");
@@ -287,8 +321,17 @@
 
     let latestData = {};
     let fileTransfers = {};
+    let csvFiles = {};
+    let pgmFiles = {};
     let combinedCsvFile = null;
     let combinedPgmFile = null;
+    let csvBuildNumber = 0;
+
+    const PICTURE_COUNT = 8;
+    const STITCH_LAYOUT = [
+      [5, 6, 7, 8],
+      [4, 3, 2, 1]
+    ];
 
     function setConnectionStatus(type, message) {
       statusDot.className = "status-dot";
@@ -317,15 +360,14 @@
 
       entry.appendChild(time);
       entry.appendChild(text);
-      bluetoothMessageLog.insertBefore(
-        entry,
-        bluetoothMessageLog.firstChild
-      );
 
+      bluetoothMessageLog.insertBefore(entry, bluetoothMessageLog.firstChild);
+
+      /*
+        Keep only the newest 30 messages so the page does not grow forever.
+      */
       while (bluetoothMessageLog.children.length > 30) {
-        bluetoothMessageLog.removeChild(
-          bluetoothMessageLog.lastChild
-        );
+        bluetoothMessageLog.removeChild(bluetoothMessageLog.lastChild);
       }
     }
 
@@ -347,10 +389,8 @@
           return;
         }
 
-        const key =
-          cleanPart.substring(0, equalsIndex).trim();
-        const value =
-          cleanPart.substring(equalsIndex + 1).trim();
+        const key = cleanPart.substring(0, equalsIndex).trim();
+        const value = cleanPart.substring(equalsIndex + 1).trim();
 
         result[key] = value;
       });
@@ -367,13 +407,7 @@
       return Number.isFinite(n) ? n : null;
     }
 
-    function setNumberIfPresent(
-      data,
-      key,
-      element,
-      decimals,
-      suffix = ""
-    ) {
+    function setNumberIfPresent(data, key, element, decimals, suffix = "") {
       if (!hasKey(data, key)) {
         return;
       }
@@ -381,8 +415,7 @@
       const n = numberOrNull(data[key]);
 
       if (n !== null) {
-        element.textContent =
-          n.toFixed(decimals) + suffix;
+        element.textContent = n.toFixed(decimals) + suffix;
       }
     }
 
@@ -394,17 +427,18 @@
       const n = numberOrNull(data[key]);
 
       if (n !== null) {
-        element.textContent =
-          String(Math.round(n));
+        element.textContent = String(Math.round(n));
       }
     }
 
     function getPictureNumber(data) {
-      const n = Number(
-        data.PIC || data.PICTURE || data.INDEX || 0
-      );
+      const n = Number(data.PIC || data.PICTURE || data.INDEX || 0);
 
-      return Number.isInteger(n) ? n : 0;
+      if (Number.isInteger(n) && n >= 1 && n <= PICTURE_COUNT) {
+        return n;
+      }
+
+      return 0;
     }
 
     function getTransferKey(tag, pic) {
@@ -412,11 +446,32 @@
     }
 
     function isCsvTag(tag) {
-      return tag === "COMBINED_CSV";
+      return tag === "RAW_CSV" || tag === "CSV" || tag === "COMBINED_CSV";
     }
 
     function isPgmTag(tag) {
-      return tag === "COMBINED_PGM";
+      return tag === "PREVIEW_PGM" || tag === "PGM" || tag === "COMBINED_PGM";
+    }
+
+    function isCombinedTag(tag) {
+      return tag === "COMBINED_CSV" || tag === "COMBINED_PGM";
+    }
+
+    function getPictureStatus(pic) {
+      return document.getElementById("status" + pic);
+    }
+
+    function setPictureStatus(pic, text) {
+      if (pic === 0) {
+        combineStatus.textContent = text;
+        return;
+      }
+
+      const status = getPictureStatus(pic);
+
+      if (status) {
+        status.textContent = text;
+      }
     }
 
     function base64ToBytes(base64Text) {
@@ -430,71 +485,97 @@
       return bytes;
     }
 
-    /*
-     * Direct browser download only.
-     * The object URL is created when the file finishes transferring, so the
-     * button click can start the download immediately.
-     */
     function downloadFileRecord(fileRecord) {
+      const a = document.createElement("a");
+      a.href = fileRecord.url;
+      a.download = fileRecord.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function saveFileRecord(fileRecord) {
       if (!fileRecord) {
         alert("This file has not finished transferring.");
         return;
       }
 
-      const link = document.createElement("a");
-      link.href = fileRecord.url;
-      link.download = fileRecord.name || "download";
-      link.style.display = "none";
+      const file = new File(
+        [fileRecord.blob],
+        fileRecord.name,
+        { type: fileRecord.blob.type || "application/octet-stream" }
+      );
 
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      /*
+        Bluefy/iPhone: use the iOS share sheet when file sharing is supported.
+        The user can then choose Save to Files.
+      */
+      try {
+        if (
+          navigator.share &&
+          navigator.canShare &&
+          navigator.canShare({ files: [file] })
+        ) {
+          await navigator.share({
+            files: [file],
+            title: fileRecord.name
+          });
+          return;
+        }
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          return;
+        }
+
+        console.warn("File sharing was unavailable; using browser download.", error);
+      }
+
+      /* Desktop/computer fallback. */
+      downloadFileRecord(fileRecord);
+    }
+
+    function receivedCount(source) {
+      let count = 0;
+
+      for (let pic = 1; pic <= PICTURE_COUNT; pic++) {
+        if (source[pic]) {
+          count++;
+        }
+      }
+
+      return count;
+    }
+
+    function allPicturesReady(source) {
+      return receivedCount(source) === PICTURE_COUNT;
+    }
+
+    function updateCombineStatus() {
+      const csvCount = receivedCount(csvFiles);
+      const pgmCount = receivedCount(pgmFiles);
+
+      combineStatus.textContent =
+        "Received " + csvCount + "/" + PICTURE_COUNT + " CSV files and " +
+        pgmCount + "/" + PICTURE_COUNT + " PGM files.";
     }
 
     combinedCsvBtn.addEventListener("click", () => {
-      downloadFileRecord(combinedCsvFile);
+      saveFileRecord(combinedCsvFile);
     });
 
     combinedPgmBtn.addEventListener("click", () => {
-      downloadFileRecord(combinedPgmFile);
+      saveFileRecord(combinedPgmFile);
     });
-
-    function updateCombineStatus() {
-      const csvReady = combinedCsvFile !== null;
-      const pgmReady = combinedPgmFile !== null;
-
-      if (csvReady && pgmReady) {
-        combineStatus.textContent =
-          "Combined CSV and PGM received from the Raspberry Pi.";
-      } else if (csvReady) {
-        combineStatus.textContent =
-          "Combined CSV received. Waiting for combined PGM.";
-      } else if (pgmReady) {
-        combineStatus.textContent =
-          "Combined PGM received. Waiting for combined CSV.";
-      } else {
-        combineStatus.textContent =
-          "Waiting for the combined CSV and PGM from the Raspberry Pi.";
-      }
-    }
 
     function readPgmToken(bytes, state) {
       while (state.index < bytes.length) {
         const ch = bytes[state.index];
 
         if (ch === 35) {
-          while (
-            state.index < bytes.length &&
-            bytes[state.index] !== 10
-          ) {
+          while (state.index < bytes.length && bytes[state.index] !== 10) {
             state.index++;
           }
-        } else if (
-          ch === 9 ||
-          ch === 10 ||
-          ch === 13 ||
-          ch === 32
-        ) {
+        } else if (ch === 9 || ch === 10 || ch === 13 || ch === 32) {
           state.index++;
         } else {
           break;
@@ -506,12 +587,7 @@
       while (state.index < bytes.length) {
         const ch = bytes[state.index];
 
-        if (
-          ch === 9 ||
-          ch === 10 ||
-          ch === 13 ||
-          ch === 32
-        ) {
+        if (ch === 9 || ch === 10 || ch === 13 || ch === 32) {
           break;
         }
 
@@ -527,26 +603,19 @@
       const magic = readPgmToken(bytes, state);
       const width = Number(readPgmToken(bytes, state));
       const height = Number(readPgmToken(bytes, state));
-      const maxValue =
-        Number(readPgmToken(bytes, state));
+      const maxValue = Number(readPgmToken(bytes, state));
 
       if (
         magic !== "P5" ||
-        !Number.isInteger(width) ||
-        width <= 0 ||
-        !Number.isInteger(height) ||
-        height <= 0 ||
-        !Number.isInteger(maxValue) ||
-        maxValue <= 0 ||
-        maxValue > 65535
+        !Number.isInteger(width) || width <= 0 ||
+        !Number.isInteger(height) || height <= 0 ||
+        !Number.isInteger(maxValue) || maxValue <= 0 || maxValue > 65535
       ) {
         throw new Error("Unsupported PGM header.");
       }
 
-      if (
-        bytes[state.index] === 13 &&
-        bytes[state.index + 1] === 10
-      ) {
+      /* Move past the required separator after the maximum value. */
+      if (bytes[state.index] === 13 && bytes[state.index + 1] === 10) {
         state.index += 2;
       } else if (
         bytes[state.index] === 9 ||
@@ -556,19 +625,13 @@
       ) {
         state.index++;
       } else {
-        throw new Error(
-          "PGM header is missing its pixel-data separator."
-        );
+        throw new Error("PGM header is missing its pixel-data separator.");
       }
 
       const bytesPerPixel = maxValue < 256 ? 1 : 2;
-      const requiredLength =
-        width * height * bytesPerPixel;
+      const requiredLength = width * height * bytesPerPixel;
 
-      if (
-        bytes.length <
-        state.index + requiredLength
-      ) {
+      if (bytes.length < state.index + requiredLength) {
         throw new Error("PGM pixel data is incomplete.");
       }
 
@@ -577,16 +640,219 @@
         height: height,
         maxValue: maxValue,
         bytesPerPixel: bytesPerPixel,
-        pixels: bytes.slice(
-          state.index,
-          state.index + requiredLength
-        )
+        pixels: bytes.slice(state.index, state.index + requiredLength)
       };
     }
 
-    function drawPgmPreview(bytes) {
-      const canvas =
-        document.getElementById("combinedCanvas");
+    function parseCsvGrid(text) {
+      const lines = text
+        .replace(/^\uFEFF/, "")
+        .split(/\r?\n/)
+        .filter(line => line.trim().length > 0);
+
+      if (lines.length === 0) {
+        throw new Error("A received CSV file was empty.");
+      }
+
+      const rows = lines.map(line => {
+        const cells = line.split(",");
+
+        while (cells.length > 0 && cells[cells.length - 1].trim() === "") {
+          cells.pop();
+        }
+
+        return cells;
+      });
+
+      const width = rows[0].length;
+
+      if (width === 0 || rows.some(row => row.length !== width)) {
+        throw new Error("A received CSV file was not a rectangular data grid.");
+      }
+
+      return rows;
+    }
+
+    function replaceCombinedRecord(oldRecord, blob, name) {
+      if (oldRecord && oldRecord.url) {
+        URL.revokeObjectURL(oldRecord.url);
+      }
+
+      return {
+        name: name,
+        blob: blob,
+        url: URL.createObjectURL(blob)
+      };
+    }
+
+    async function buildCombinedCsv() {
+      if (!allPicturesReady(csvFiles)) {
+        combinedCsvBtn.disabled = true;
+        combinedCsvBtn.textContent =
+          "Combined CSV: " + receivedCount(csvFiles) + "/" + PICTURE_COUNT;
+        return;
+      }
+
+      const thisBuild = ++csvBuildNumber;
+      combinedCsvBtn.disabled = true;
+      combinedCsvBtn.textContent = "Combining CSV...";
+
+      try {
+        const textFiles = await Promise.all(
+          Array.from(
+            { length: PICTURE_COUNT },
+            (_, index) => csvFiles[index + 1].blob.text()
+          )
+        );
+
+        if (thisBuild !== csvBuildNumber) {
+          return;
+        }
+
+        const grids = {};
+
+        for (let pic = 1; pic <= PICTURE_COUNT; pic++) {
+          grids[pic] = parseCsvGrid(textFiles[pic - 1]);
+        }
+
+        const sourceHeight = grids[1].length;
+        const sourceWidth = grids[1][0].length;
+
+        for (let pic = 2; pic <= PICTURE_COUNT; pic++) {
+          if (
+            grids[pic].length !== sourceHeight ||
+            grids[pic][0].length !== sourceWidth
+          ) {
+            throw new Error("The eight CSV files do not have matching dimensions.");
+          }
+        }
+
+        const outputRows = [];
+
+        for (const pictureRow of STITCH_LAYOUT) {
+          for (let row = 0; row < sourceHeight; row++) {
+            const outputCells = [];
+
+            for (const pic of pictureRow) {
+              outputCells.push(...grids[pic][row]);
+            }
+
+            outputRows.push(outputCells.join(","));
+          }
+        }
+
+        const csvText = outputRows.join("\r\n") + "\r\n";
+        const blob = new Blob([csvText], { type: "text/csv" });
+
+        combinedCsvFile = replaceCombinedRecord(
+          combinedCsvFile,
+          blob,
+          "combined_thermal_scan.csv"
+        );
+
+        combinedCsvBtn.disabled = false;
+        combinedCsvBtn.textContent = "Save Combined CSV";
+        addBluetoothMessage(
+          "Combined CSV is ready (" +
+          (sourceWidth * 4) + " columns × " +
+          (sourceHeight * 2) + " rows)."
+        );
+      } catch (error) {
+        console.error(error);
+        combinedCsvBtn.disabled = true;
+        combinedCsvBtn.textContent = "CSV combine error";
+        addBluetoothMessage("Could not combine CSV files: " + error.message);
+      }
+    }
+
+    function buildCombinedPgm() {
+      if (!allPicturesReady(pgmFiles)) {
+        combinedPgmBtn.disabled = true;
+        combinedPgmBtn.textContent =
+          "Combined PGM: " + receivedCount(pgmFiles) + "/" + PICTURE_COUNT;
+        return;
+      }
+
+      combinedPgmBtn.disabled = true;
+      combinedPgmBtn.textContent = "Combining PGM...";
+
+      try {
+        const images = {};
+
+        for (let pic = 1; pic <= PICTURE_COUNT; pic++) {
+          images[pic] = parsePgmBytes(pgmFiles[pic].bytes);
+        }
+
+        const sourceWidth = images[1].width;
+        const sourceHeight = images[1].height;
+        const maxValue = images[1].maxValue;
+        const bytesPerPixel = images[1].bytesPerPixel;
+
+        for (let pic = 2; pic <= PICTURE_COUNT; pic++) {
+          if (
+            images[pic].width !== sourceWidth ||
+            images[pic].height !== sourceHeight ||
+            images[pic].maxValue !== maxValue ||
+            images[pic].bytesPerPixel !== bytesPerPixel
+          ) {
+            throw new Error("The eight PGM files do not have matching formats.");
+          }
+        }
+
+        const outputWidth = sourceWidth * 4;
+        const outputHeight = sourceHeight * 2;
+        const outputPixels = new Uint8Array(
+          outputWidth * outputHeight * bytesPerPixel
+        );
+        let outputIndex = 0;
+
+        for (const pictureRow of STITCH_LAYOUT) {
+          for (let row = 0; row < sourceHeight; row++) {
+            for (const pic of pictureRow) {
+              const sourceStart = row * sourceWidth * bytesPerPixel;
+              const sourceEnd = sourceStart + sourceWidth * bytesPerPixel;
+
+              outputPixels.set(
+                images[pic].pixels.subarray(sourceStart, sourceEnd),
+                outputIndex
+              );
+              outputIndex += sourceWidth * bytesPerPixel;
+            }
+          }
+        }
+
+        const header = new TextEncoder().encode(
+          "P5\n" + outputWidth + " " + outputHeight + "\n" + maxValue + "\n"
+        );
+        const blob = new Blob(
+          [header, outputPixels],
+          { type: "image/x-portable-graymap" }
+        );
+
+        combinedPgmFile = replaceCombinedRecord(
+          combinedPgmFile,
+          blob,
+          "combined_thermal_scan.pgm"
+        );
+
+        combinedPgmBtn.disabled = false;
+        combinedPgmBtn.textContent = "Save Combined PGM";
+        addBluetoothMessage(
+          "Combined PGM is ready (" +
+          outputWidth + " × " + outputHeight + " pixels)."
+        );
+      } catch (error) {
+        console.error(error);
+        combinedPgmBtn.disabled = true;
+        combinedPgmBtn.textContent = "PGM combine error";
+        addBluetoothMessage("Could not combine PGM files: " + error.message);
+      }
+    }
+
+    function drawPgmPreview(bytes, pic) {
+      const canvas = document.getElementById(
+        pic === 0 ? "canvasCombined" : "canvas" + pic
+      );
 
       if (!canvas) {
         return;
@@ -597,9 +863,7 @@
       try {
         pgm = parsePgmBytes(bytes);
       } catch (error) {
-        addBluetoothMessage(
-          "PGM preview error: " + error.message
-        );
+        setPictureStatus(pic, "PGM preview error: " + error.message);
         return;
       }
 
@@ -608,8 +872,7 @@
       canvas.style.display = "block";
 
       const ctx = canvas.getContext("2d");
-      const imageData =
-        ctx.createImageData(pgm.width, pgm.height);
+      const imageData = ctx.createImageData(pgm.width, pgm.height);
       const pixelCount = pgm.width * pgm.height;
 
       for (let i = 0; i < pixelCount; i++) {
@@ -618,13 +881,10 @@
         if (pgm.bytesPerPixel === 1) {
           value = pgm.pixels[i];
         } else {
-          value =
-            (pgm.pixels[i * 2] << 8) |
-            pgm.pixels[i * 2 + 1];
+          value = (pgm.pixels[i * 2] << 8) | pgm.pixels[i * 2 + 1];
         }
 
-        const gray =
-          Math.round((value * 255) / pgm.maxValue);
+        const gray = Math.round((value * 255) / pgm.maxValue);
         const outIndex = i * 4;
 
         imageData.data[outIndex] = gray;
@@ -638,31 +898,11 @@
 
     function updateUserDisplay(message) {
       const data = parseSensorMessage(message);
+      latestData = Object.assign(latestData, data);
 
-      latestData =
-        Object.assign(latestData, data);
-
-      setNumberIfPresent(
-        latestData,
-        "MAX_TEMP",
-        maxTempBox,
-        1,
-        " °C"
-      );
-
-      setNumberIfPresent(
-        latestData,
-        "MIN_TEMP",
-        minTempBox,
-        1,
-        " °C"
-      );
-
-      setIntegerIfPresent(
-        latestData,
-        "MITE_COUNT",
-        miteCountBox
-      );
+      setNumberIfPresent(latestData, "MAX_TEMP", maxTempBox, 1, " °C");
+      setNumberIfPresent(latestData, "MIN_TEMP", minTempBox, 1, " °C");
+      setIntegerIfPresent(latestData, "MITE_COUNT", miteCountBox);
 
       if (hasKey(data, "MESSAGE")) {
         addBluetoothMessage(data.MESSAGE);
@@ -672,15 +912,12 @@
     function handleFileMessage(message) {
       const type = message.trim().split(";")[0];
       const data = parseSensorMessage(message);
-      const tag =
-        String(data.TAG || "UNKNOWN").toUpperCase();
+      const tag = String(data.TAG || "UNKNOWN").toUpperCase();
       const pic = getPictureNumber(data);
       const key = getTransferKey(tag, pic);
 
-      if (!isCsvTag(tag) && !isPgmTag(tag)) {
-        addBluetoothMessage(
-          "Unexpected file type: " + tag
-        );
+      if (pic === 0 && !isCombinedTag(tag)) {
+        addBluetoothMessage("File message missing PIC number.");
         return;
       }
 
@@ -688,24 +925,26 @@
         fileTransfers[key] = {
           tag: tag,
           pic: pic,
-          name:
-            data.NAME ||
-            (isCsvTag(tag)
-              ? "combined_thermal_scan.csv"
-              : "combined_thermal_scan.pgm"),
+          name: data.NAME || (tag + "_picture_" + pic),
+          size: Number(data.SIZE),
           chunks: [],
           receivedChunks: 0
         };
 
+        setPictureStatus(pic, "Receiving " + tag + "...");
+
         if (isCsvTag(tag)) {
           combinedCsvBtn.disabled = true;
-          combinedCsvBtn.textContent =
-            "Receiving Combined CSV...";
-        } else {
+          combinedCsvBtn.textContent = isCombinedTag(tag)
+            ? "Receiving Combined CSV..."
+            : "Receiving CSV " + pic + "...";
+        } else if (isPgmTag(tag)) {
           combinedPgmBtn.disabled = true;
-          combinedPgmBtn.textContent =
-            "Receiving Combined PGM...";
+          combinedPgmBtn.textContent = isCombinedTag(tag)
+            ? "Receiving Combined PGM..."
+            : "Receiving PGM " + pic + "...";
         }
+
 
         return;
       }
@@ -714,43 +953,22 @@
         const transfer = fileTransfers[key];
 
         if (!transfer) {
-          addBluetoothMessage(
-            "Chunk received before FILE_BEGIN for " + tag + "."
-          );
+          setPictureStatus(pic, "Chunk received before FILE_BEGIN.");
           return;
         }
 
         const seq = Number(data.SEQ);
 
-        if (!Number.isInteger(seq) || seq < 0) {
-          addBluetoothMessage(
-            "Bad chunk sequence number for " + tag + "."
-          );
+        if (!Number.isFinite(seq)) {
+          setPictureStatus(pic, "Bad chunk sequence number.");
           return;
         }
 
-        if (transfer.chunks[seq] === undefined) {
-          transfer.receivedChunks++;
-        }
-
         transfer.chunks[seq] = data.DATA || "";
+        transfer.receivedChunks++;
 
-        if (transfer.receivedChunks % 100 === 0) {
-          const label = isCsvTag(tag)
-            ? "Combined CSV"
-            : "Combined PGM";
-
-          if (isCsvTag(tag)) {
-            combinedCsvBtn.textContent =
-              "Receiving " + label +
-              " (" + transfer.receivedChunks +
-              " chunks)...";
-          } else {
-            combinedPgmBtn.textContent =
-              "Receiving " + label +
-              " (" + transfer.receivedChunks +
-              " chunks)...";
-          }
+        if (transfer.receivedChunks % 10 === 0) {
+          setPictureStatus(pic, "Receiving " + transfer.tag + " (" + transfer.receivedChunks + " chunks)...");
         }
 
         return;
@@ -760,48 +978,75 @@
         const transfer = fileTransfers[key];
 
         if (!transfer) {
-          addBluetoothMessage(
-            "FILE_END received before FILE_BEGIN for " +
-            tag + "."
-          );
+          setPictureStatus(pic, "FILE_END received before FILE_BEGIN.");
           return;
         }
+
+        const expectedChunks = Number(data.CHUNKS);
+        let transferError = "";
+
+        if (!Number.isInteger(expectedChunks) || expectedChunks < 0) {
+          transferError = "FILE_END had an invalid chunk count.";
+        } else {
+          for (let seq = 0; seq < expectedChunks; seq++) {
+            if (typeof transfer.chunks[seq] !== "string") {
+              transferError =
+                "Transfer incomplete: missing chunk " + seq +
+                " of " + expectedChunks + ".";
+              break;
+            }
+          }
+        }
+
+        if (transferError) {
+          setPictureStatus(pic, transferError);
+          if (isCsvTag(tag)) {
+            combinedCsvBtn.disabled = true;
+            combinedCsvBtn.textContent = "CSV transfer incomplete";
+          } else if (isPgmTag(tag)) {
+            combinedPgmBtn.disabled = true;
+            combinedPgmBtn.textContent = "PGM transfer incomplete";
+          }
+          addBluetoothMessage(transferError + " Please run the scan again.");
+          delete fileTransfers[key];
+          return;
+        }
+
+        const bytes = base64ToBytes(transfer.chunks.join(""));
 
         if (
-          transfer.chunks.length === 0 ||
-          transfer.chunks.some(
-            chunk => typeof chunk !== "string"
-          )
+          Number.isInteger(transfer.size) && transfer.size >= 0 &&
+          bytes.length !== transfer.size
         ) {
-          addBluetoothMessage(
-            "The received " + tag +
-            " file is missing one or more chunks."
-          );
+          const sizeError =
+            "Transfer incomplete: expected " + transfer.size +
+            " bytes but received " + bytes.length + ".";
+          setPictureStatus(pic, sizeError);
+          if (isCsvTag(tag)) {
+            combinedCsvBtn.disabled = true;
+            combinedCsvBtn.textContent = "CSV transfer incomplete";
+          } else if (isPgmTag(tag)) {
+            combinedPgmBtn.disabled = true;
+            combinedPgmBtn.textContent = "PGM transfer incomplete";
+          }
+          addBluetoothMessage(sizeError + " Please run the scan again.");
           delete fileTransfers[key];
           return;
         }
 
-        let bytes;
-
-        try {
-          bytes = base64ToBytes(
-            transfer.chunks.join("")
-          );
-        } catch (error) {
-          addBluetoothMessage(
-            "Could not decode " + tag +
-            ": " + error.message
-          );
-          delete fileTransfers[key];
-          return;
-        }
+        let mimeType = "application/octet-stream";
 
         if (isCsvTag(tag)) {
-          const blob = new Blob(
-            [bytes],
-            { type: "text/csv" }
-          );
+          mimeType = "text/csv";
+        } else if (isPgmTag(tag)) {
+          mimeType = "image/x-portable-graymap";
+        }
 
+        /* Create the file before storing it in either file record. */
+        const blob = new Blob([bytes], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+
+        if (tag === "COMBINED_CSV") {
           if (combinedCsvFile && combinedCsvFile.url) {
             URL.revokeObjectURL(combinedCsvFile.url);
           }
@@ -809,24 +1054,13 @@
           combinedCsvFile = {
             name: transfer.name,
             blob: blob,
-            url: URL.createObjectURL(blob)
+            url: url
           };
-
           combinedCsvBtn.disabled = false;
-          combinedCsvBtn.textContent =
-            "Download Combined CSV";
-          addBluetoothMessage(
-            "Combined CSV received."
-          );
-        } else {
-          const blob = new Blob(
-            [bytes],
-            {
-              type:
-                "image/x-portable-graymap"
-            }
-          );
-
+          combinedCsvBtn.textContent = "Save Combined CSV";
+          combineStatus.textContent = "Combined CSV received; waiting for combined PGM.";
+          addBluetoothMessage("Combined CSV received.");
+        } else if (tag === "COMBINED_PGM") {
           if (combinedPgmFile && combinedPgmFile.url) {
             URL.revokeObjectURL(combinedPgmFile.url);
           }
@@ -834,29 +1068,60 @@
           combinedPgmFile = {
             name: transfer.name,
             blob: blob,
-            url: URL.createObjectURL(blob),
+            url: url,
+            bytes: bytes
+          };
+          combinedPgmBtn.disabled = false;
+          combinedPgmBtn.textContent = "Save Combined PGM";
+          drawPgmPreview(bytes, 0);
+          combineStatus.textContent = combinedCsvFile
+            ? "Combined CSV and PGM received."
+            : "Combined PGM received; waiting for combined CSV.";
+          addBluetoothMessage("Combined PGM received (526 × 225 pixels).");
+        } else if (isCsvTag(tag)) {
+          if (csvFiles[pic] && csvFiles[pic].url) {
+            URL.revokeObjectURL(csvFiles[pic].url);
+          }
+
+          csvFiles[pic] = {
+            name: transfer.name,
+            blob: blob,
+            url: url
+          };
+
+          setPictureStatus(pic, "CSV received.");
+          addBluetoothMessage("CSV file " + pic + " received.");
+          buildCombinedCsv();
+        } else if (isPgmTag(tag)) {
+          if (pgmFiles[pic] && pgmFiles[pic].url) {
+            URL.revokeObjectURL(pgmFiles[pic].url);
+          }
+
+          pgmFiles[pic] = {
+            name: transfer.name,
+            blob: blob,
+            url: url,
             bytes: bytes
           };
 
-          combinedPgmBtn.disabled = false;
-          combinedPgmBtn.textContent =
-            "Download Combined PGM";
+          drawPgmPreview(bytes, pic);
+          buildCombinedPgm();
 
-          drawPgmPreview(bytes);
-
-          addBluetoothMessage(
-            "Combined PGM received."
-          );
+          if (csvFiles[pic]) {
+            setPictureStatus(pic, "CSV and PGM received.");
+          } else {
+            setPictureStatus(pic, "PGM received.");
+          }
         }
 
         delete fileTransfers[key];
-        updateCombineStatus();
+        if (!isCombinedTag(tag)) {
+          updateCombineStatus();
+        }
         return;
       }
 
-      addBluetoothMessage(
-        "Unknown file message received."
-      );
+      addBluetoothMessage("Unknown file message received.");
     }
 
     function handleBleMessage(message) {
@@ -871,140 +1136,70 @@
       const text = String(error);
 
       if (text.includes("User cancelled")) {
-        return (
-          "Connection was cancelled. Press the button " +
-          "again when you are ready."
-        );
+        return "Connection was cancelled. Press the button again when you are ready.";
       }
 
-      if (
-        text.includes("Bluetooth adapter not available")
-      ) {
-        return (
-          "Bluetooth is turned off or unavailable on " +
-          "this computer."
-        );
+      if (text.includes("Bluetooth adapter not available")) {
+        return "Bluetooth is turned off or unavailable on this computer.";
       }
 
       if (text.includes("No Services matching")) {
-        return (
-          "The hive sensor was found, but it is not " +
-          "sending the expected data format."
-        );
+        return "The hive sensor was found, but it is not sending the expected data format.";
       }
 
       if (text.includes("NetworkError")) {
-        return (
-          "The connection was lost. Move closer to the " +
-          "Raspberry Pi and try again."
-        );
+        return "The connection was lost. Move closer to the Raspberry Pi and try again.";
       }
 
       if (text.includes("NotFoundError")) {
-        return (
-          "No hive sensor was selected. Make sure " +
-          "BeeMonitor is running on the Raspberry Pi."
-        );
+        return "No hive sensor was selected. Make sure BeeMonitor is running on the Raspberry Pi.";
       }
 
-      if (!navigator.bluetooth) {
-        return (
-          "This browser does not support Web Bluetooth. " +
-          "Use a supported browser or the Bluefy app."
-        );
-      }
-
-      return (
-        "Something went wrong while connecting. Restart " +
-        "the Raspberry Pi Bluetooth program and try again."
-      );
+      return "Something went wrong while connecting. Restart the Raspberry Pi Bluetooth program and try again.";
     }
 
     connectBtn.addEventListener("click", async () => {
       try {
-        if (!navigator.bluetooth) {
-          throw new Error(
-            "Bluetooth adapter not available"
-          );
-        }
-
         connectBtn.disabled = true;
-        setConnectionStatus(
-          "warning",
-          "Searching for hive sensor..."
-        );
+        setConnectionStatus("warning", "Searching for hive sensor...");
 
-        const device =
-          await navigator.bluetooth.requestDevice({
-            filters: [{ name: "BeeMonitor" }],
-            optionalServices: [SERVICE_UUID]
-          });
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: "BeeMonitor" }],
+          optionalServices: [SERVICE_UUID]
+        });
 
-        setConnectionStatus(
-          "warning",
-          "Connecting..."
-        );
+        setConnectionStatus("warning", "Connecting...");
 
-        device.addEventListener(
-          "gattserverdisconnected",
-          () => {
-            connectBtn.disabled = false;
-            setConnectionStatus(
-              "error",
-              "Disconnected"
-            );
-            addBluetoothMessage(
-              "Disconnected from Raspberry Pi."
-            );
-          }
-        );
+        device.addEventListener("gattserverdisconnected", () => {
+          connectBtn.disabled = false;
+          setConnectionStatus("error", "Disconnected");
+          addBluetoothMessage("Disconnected from Raspberry Pi.");
+        });
 
         const server = await device.gatt.connect();
-        const service =
-          await server.getPrimaryService(
-            SERVICE_UUID
-          );
-        const characteristic =
-          await service.getCharacteristic(
-            CHAR_UUID
-          );
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        const characteristic = await service.getCharacteristic(CHAR_UUID);
 
-        characteristic.addEventListener(
-          "characteristicvaluechanged",
-          event => {
-            const value = event.target.value;
-            const message =
-              new TextDecoder().decode(value);
+        setConnectionStatus("connected", "Connected to hive sensor");
 
-            handleBleMessage(message);
-          }
-        );
-
-        /*
-         * Install the listener before enabling notifications and before the
-         * read request creates the Pi-side connected flag. This prevents the
-         * first messages from arriving before the website is ready.
-         */
         await characteristic.startNotifications();
         await characteristic.readValue();
 
-        setConnectionStatus(
-          "connected",
-          "Connected to hive sensor"
-        );
+        characteristic.addEventListener("characteristicvaluechanged", event => {
+          const value = event.target.value;
+          const message = new TextDecoder().decode(value);
+
+          handleBleMessage(message);
+        });
 
         addBluetoothMessage("Connected.");
+
       } catch (error) {
         console.error(error);
 
         connectBtn.disabled = false;
-        setConnectionStatus(
-          "error",
-          "Connection problem"
-        );
-        addBluetoothMessage(
-          friendlyError(error)
-        );
+        setConnectionStatus("error", "Connection problem");
+        addBluetoothMessage(friendlyError(error));
       }
     });
   </script>
